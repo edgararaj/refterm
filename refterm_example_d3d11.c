@@ -313,9 +313,10 @@ static d3d11_renderer AcquireD3D11Renderer(HWND Window, int EnableDebugging)
             {
                 Result.FrameLatencyWaitableObject = IDXGISwapChain2_GetFrameLatencyWaitableObject(Result.SwapChain);
 
+                int ByteWidth = sizeof(renderer_const_buffer);
                 D3D11_BUFFER_DESC ConstantBufferDesc =
                 {
-                    .ByteWidth = sizeof(renderer_const_buffer),
+                    .ByteWidth = ByteWidth + (16 - ByteWidth % 16),
                     .Usage = D3D11_USAGE_DYNAMIC,
                     .BindFlags = D3D11_BIND_CONSTANT_BUFFER,
                     .CPUAccessFlags = D3D11_CPU_ACCESS_WRITE,
@@ -337,7 +338,7 @@ static d3d11_renderer AcquireD3D11Renderer(HWND Window, int EnableDebugging)
     return Result;
 }
 
-static void RendererDraw(example_terminal *Terminal, uint32_t Width, uint32_t Height, terminal_buffer *Term, uint32_t BlinkModulate)
+static void RendererDraw(example_terminal *Terminal, uint32_t Width, uint32_t Height, terminal_buffer *Term, uint32_t BlinkModulate, uint32_t CursorBlinkModulate)
 {
     // TODO(casey): This should be split into two routines now, since we don't actually
     // need to resubmit anything if the terminal hasn't updated.
@@ -405,6 +406,7 @@ static void RendererDraw(example_terminal *Terminal, uint32_t Width, uint32_t He
         hr = ID3D11DeviceContext_Map(Renderer->DeviceContext, (ID3D11Resource*)Renderer->ConstantBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &Mapped);
         AssertHR(hr);
         {
+			uint32_t TopLineCount = (Term->DimY - Term->FirstLineY);
             renderer_const_buffer ConstData =
             {
                 .CellSize = { GlyphGen->FontWidth, GlyphGen->FontHeight },
@@ -417,6 +419,10 @@ static void RendererDraw(example_terminal *Terminal, uint32_t Width, uint32_t He
                 .StrikeMax = GlyphGen->FontHeight/2 + GlyphGen->FontHeight/10,
                 .UnderlineMin = GlyphGen->FontHeight - GlyphGen->FontHeight/5,
                 .UnderlineMax = GlyphGen->FontHeight,
+
+                .CursorPos = { Terminal->CursorPos.X, TopLineCount + Terminal->CursorPos.Y },
+                .CursorRelPos = { (uint32_t)(Terminal->CursorRelPos.X), (uint32_t)(Terminal->CursorRelPos.Y)},
+                .CursorBlinkModulate = CursorBlinkModulate
             };
             memcpy(Mapped.pData, &ConstData, sizeof(ConstData));
         }

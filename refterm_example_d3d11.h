@@ -9,6 +9,10 @@ typedef struct
     uint32_t StrikeMax;
     uint32_t UnderlineMin;
     uint32_t UnderlineMax;
+
+    uint32_t CursorPos[2];
+    uint32_t CursorRelPos[2];
+    uint32_t CursorBlinkModulate;
 } renderer_const_buffer;
 
 #define RENDERER_CELL_BLINK 0x80000000
@@ -33,6 +37,7 @@ typedef struct
     ID3D11VertexShader *VertexShader;
 
     ID3D11Buffer *ConstantBuffer;
+    ID3D11Buffer *ConstantBuffer2;
     ID3D11RenderTargetView *RenderTarget;
     ID3D11UnorderedAccessView *RenderView;
 

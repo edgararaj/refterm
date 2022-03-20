@@ -24,6 +24,11 @@ typedef struct
 
 typedef struct
 {
+    float X, Y;
+} terminal_rel_point;
+
+typedef struct
+{
     uint32_t Foreground;
     uint32_t Background;
     uint32_t Flags;
@@ -115,6 +120,13 @@ typedef struct
 
     uint32_t REFTERM_MAX_WIDTH;
     uint32_t REFTERM_MAX_HEIGHT;
+
+    terminal_point CursorPos;
+    terminal_rel_point CursorRelPos;
+    terminal_point TargetCursorPos;
+
+    LARGE_INTEGER CursorBlinkStartTime;
+    LARGE_INTEGER TypingStartTime;
 
 #define MinDirectCodepoint 32
 #define MaxDirectCodepoint 126

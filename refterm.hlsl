@@ -17,6 +17,10 @@ cbuffer ConstBuffer : register(b0)
     uint StrikeMax;
     uint UnderlineMin;
     uint UnderlineMax;
+
+    uint2 CursorPos;
+    uint2 CursorRelPos;
+    uint CursorBlinkModulate;
 };
 
 StructuredBuffer<TerminalCell> Cells : register(t0);
@@ -58,7 +62,7 @@ float4 ComputeOutputColor(uint2 ScreenPos)
         float3 Background = UnpackColor(Cell.Background);
         float3 Foreground = UnpackColor(Cell.Foreground);
         float3 Blink = UnpackColor(BlinkModulate);
-
+        float3 CursorBlink = UnpackColor(CursorBlinkModulate);
 
         if((Cell.Foreground >> 28) & 1) Foreground *= Blink;
         if((Cell.Foreground >> 25) & 1) Foreground *= 0.5;
@@ -72,6 +76,10 @@ float4 ComputeOutputColor(uint2 ScreenPos)
         if( (Cell.Foreground >> 31) &&
             (CellPos.y >= StrikeMin) &&
             (CellPos.y < StrikeMax)) Result.rgb = Foreground.rgb;
+
+        if ((CursorPos.y == CellIndex.y) && (CursorPos.x == CellIndex.x) &&
+            (CellPos.x >= CursorRelPos.x + 0) &&
+            (CellPos.x < CursorRelPos.x + 1)) Result.rgb = float3(1, 1, 1) * CursorBlink;
     }
     else
     {

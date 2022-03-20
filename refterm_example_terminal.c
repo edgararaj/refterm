@@ -762,11 +762,14 @@ static void LayoutLines(example_terminal *Terminal)
     CommandLineRange.Data = Terminal->CommandLine;
     ParseLineIntoGlyphs(Terminal, CommandLineRange, &Cursor, 1);
 
+    /*
     char CursorCode[] = {'\x1b', '[', '5',  'm', 0xe2, 0x96, 0x88};
     source_buffer_range CursorRange = {0};
     CursorRange.Count = ArrayCount(CursorCode);
     CursorRange.Data = CursorCode;
     ParseLineIntoGlyphs(Terminal, CursorRange, &Cursor, 1);
+    */
+    Terminal->TargetCursorPos = Cursor.At;
     AdvanceRowNoClear(Terminal, &Cursor.At);
 
     Terminal->ScreenBuffer.FirstLineY = CursorJumped ? 0 : Cursor.At.Y;
@@ -1071,6 +1074,15 @@ static void ProcessMessages(example_terminal *Terminal)
     MSG Message;
     while(PeekMessage(&Message, 0, 0, 0, PM_REMOVE))
     {
+        if (Message.message == WM_KEYDOWN || Message.message == WM_CHAR || (Message.message == WM_ACTIVATE && Message.wParam == WA_CLICKACTIVE))
+        {
+            if (!(Message.message == WM_ACTIVATE && Message.wParam == WA_CLICKACTIVE))
+            {
+				QueryPerformanceCounter(&Terminal->TypingStartTime);
+            }
+
+			QueryPerformanceCounter(&Terminal->CursorBlinkStartTime);
+        }
         switch(Message.message)
         {
             case WM_QUIT:
@@ -1176,6 +1188,7 @@ static DWORD WINAPI TerminalThread(LPVOID Param)
 {
     example_terminal *Terminal = VirtualAlloc(0, sizeof(example_terminal), MEM_COMMIT|MEM_RESERVE, PAGE_READWRITE);
     Terminal->Window = (HWND)Param;
+    Terminal->NoThrottle = 1;
     Terminal->LineWrap = 1;
     Terminal->ChildProcess = INVALID_HANDLE_VALUE;
     Terminal->Legacy_WriteStdIn = INVALID_HANDLE_VALUE;
@@ -1244,7 +1257,7 @@ static DWORD WINAPI TerminalThread(LPVOID Param)
     AppendOutput(Terminal, OpeningMessage);
     AppendOutput(Terminal, "\n");
     
-    int BlinkMS = 500; // TODO(casey): Use this in blink determination
+    int BlinkMS = 400; // TODO(casey): Use this in blink determination
     int MinTermSize = 512;
     uint32_t Width = MinTermSize;
     uint32_t Height = MinTermSize;
@@ -1334,6 +1347,30 @@ static DWORD WINAPI TerminalThread(LPVOID Param)
         LARGE_INTEGER BlinkTimer;
         QueryPerformanceCounter(&BlinkTimer);
         int Blink = ((1000*(BlinkTimer.QuadPart - StartTime.QuadPart) / (BlinkMS*Frequency.QuadPart)) & 1);
+        int WindowHasFocus = GetForegroundWindow() == Terminal->Window;
+        int CursorBlink = (((1000*(BlinkTimer.QuadPart - Terminal->CursorBlinkStartTime.QuadPart) / (BlinkMS*Frequency.QuadPart)) & 1) == 0) && WindowHasFocus;
+
+        if (FrameIndex == 0)
+        {
+			Terminal->CursorPos.Y = Terminal->TargetCursorPos.Y;
+			Terminal->CursorPos.X = Terminal->TargetCursorPos.X;
+			Terminal->CursorRelPos.X = 0;
+			Terminal->CursorRelPos.Y = 0;
+        }
+        else
+        {
+			float DeltaSec = (BlinkTimer.QuadPart - Terminal->TypingStartTime.QuadPart) / (float)Frequency.QuadPart;
+			int PixelsPerTile = 10;
+			float DeltaPixels = (Terminal->TargetCursorPos.X - Terminal->CursorPos.X) * PixelsPerTile - Terminal->CursorRelPos.X;
+            float MovingPixels = DeltaPixels * DeltaSec;
+
+            float EndPixel = Terminal->CursorPos.X * PixelsPerTile + Terminal->CursorRelPos.X + MovingPixels;
+			Terminal->CursorPos.X = (uint32_t)(EndPixel / PixelsPerTile);
+			Terminal->CursorRelPos.X = EndPixel - (Terminal->CursorPos.X * PixelsPerTile);
+			Terminal->CursorRelPos.Y = 0;
+			Terminal->CursorPos.Y = Terminal->TargetCursorPos.Y;
+        }
+
         if(!Terminal->Renderer.Device)
         {
             Terminal->Renderer = AcquireD3D11Renderer(Terminal->Window, 0);
@@ -1341,7 +1378,7 @@ static DWORD WINAPI TerminalThread(LPVOID Param)
         }
         if(Terminal->Renderer.Device)
         {
-            RendererDraw(Terminal, Width, Height, &Terminal->ScreenBuffer, Blink ? 0xffffffff : 0xff222222);
+            RendererDraw(Terminal, Width, Height, &Terminal->ScreenBuffer, Blink ? 0xffffffff : 0xff222222, CursorBlink ? 0xffffffff : 0xff222222);
         }
         ++FrameIndex;
         ++FrameCount;
