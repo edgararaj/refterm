@@ -931,7 +931,7 @@ RefreshFont(example_terminal *Terminal)
         TileIndex < ArrayCount(Terminal->ReservedTileTable);
         ++TileIndex)
     {
-        wchar_t Letter = MinDirectCodepoint + TileIndex;
+        wchar_t Letter = (wchar_t)(MinDirectCodepoint + TileIndex);
         PrepareTilesForTransfer(&Terminal->GlyphGen, &Terminal->Renderer, 1, &Letter, UnitDim);
         TransferTile(&Terminal->GlyphGen, &Terminal->Renderer, 0, Terminal->ReservedTileTable[TileIndex]);
     }
@@ -1188,7 +1188,7 @@ static DWORD WINAPI TerminalThread(LPVOID Param)
 {
     example_terminal *Terminal = VirtualAlloc(0, sizeof(example_terminal), MEM_COMMIT|MEM_RESERVE, PAGE_READWRITE);
     Terminal->Window = (HWND)Param;
-    Terminal->NoThrottle = 1;
+    Terminal->NoThrottle = 0;
     Terminal->LineWrap = 1;
     Terminal->ChildProcess = INVALID_HANDLE_VALUE;
     Terminal->Legacy_WriteStdIn = INVALID_HANDLE_VALUE;

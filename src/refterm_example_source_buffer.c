@@ -34,8 +34,8 @@ static source_buffer AllocateSourceBuffer(size_t DataSize)
             Offset += 0x1000000)
         {
             // TODO(casey): Harden this path to try multiple times
-            void *View1 = (char *)MapViewOfFileEx(Section, FILE_MAP_ALL_ACCESS, 0, 0, DataSize, (void *)Offset);
-            void *View2 = MapViewOfFileEx(Section, FILE_MAP_ALL_ACCESS, 0, 0, DataSize, ((char *)View1 + DataSize));
+            View1 = (char *)MapViewOfFileEx(Section, FILE_MAP_ALL_ACCESS, 0, 0, DataSize, (void *)Offset);
+            View2 = MapViewOfFileEx(Section, FILE_MAP_ALL_ACCESS, 0, 0, DataSize, ((char *)View1 + DataSize));
 
             if(View1 && View2)
             {

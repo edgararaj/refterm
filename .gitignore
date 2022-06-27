@@ -1,5 +1,2 @@
-.vs
-*.exe
-*.pdb
-*.obj
-refterm_shader.h
+.vs*
+build_*/
