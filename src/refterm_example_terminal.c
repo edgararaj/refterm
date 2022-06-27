@@ -1074,13 +1074,15 @@ static void ProcessMessages(example_terminal *Terminal)
     MSG Message;
     while(PeekMessage(&Message, 0, 0, 0, PM_REMOVE))
     {
-        if (Message.message == WM_KEYDOWN || Message.message == WM_CHAR || (Message.message == WM_ACTIVATE && Message.wParam == WA_CLICKACTIVE))
+        if (Message.message == WM_KEYDOWN || Message.message == WM_CHAR)
         {
-            if (!(Message.message == WM_ACTIVATE && Message.wParam == WA_CLICKACTIVE))
-            {
-				QueryPerformanceCounter(&Terminal->TypingStartTime);
-            }
-
+            Terminal->CursorBlinkState = 1;
+			QueryPerformanceCounter(&Terminal->CursorBlinkStartTime);
+            QueryPerformanceCounter(&Terminal->TypingStartTime);
+        }
+        else if (Message.message == WM_ACTIVATE)
+        {
+            Terminal->CursorBlinkState = Message.wParam != WA_INACTIVE;
 			QueryPerformanceCounter(&Terminal->CursorBlinkStartTime);
         }
         switch(Message.message)
@@ -1277,7 +1279,31 @@ static DWORD WINAPI TerminalThread(LPVOID Param)
 
     while(!Terminal->Quit)
     {
-        if(!Terminal->NoThrottle)
+        LARGE_INTEGER EndTime;
+        QueryPerformanceCounter(&EndTime);
+
+        int MSElapsed = (int)(1000*(EndTime.QuadPart - StartTime.QuadPart) / Frequency.QuadPart);
+
+        int UntilGlobalBlink = BlinkMS - MSElapsed;
+        if (MSElapsed >= BlinkMS) {
+            Terminal->GlobalBlinkState = !Terminal->GlobalBlinkState;
+
+            StartTime = EndTime;
+        }
+
+        int MSElapsedSinceActivate = (int)(1000*(EndTime.QuadPart - Terminal->CursorBlinkStartTime.QuadPart) / Frequency.QuadPart);
+        int UntilCursosrBlink = BlinkMS - MSElapsedSinceActivate;
+        if (MSElapsedSinceActivate >= BlinkMS) {
+            int WindowHasFocus = GetForegroundWindow() == Terminal->Window;
+            Terminal->CursorBlinkState = !Terminal->CursorBlinkState && WindowHasFocus;
+
+            Terminal->CursorBlinkStartTime = EndTime;
+        }
+
+        int PixelsPerTile = 10;
+        float DeltaPixels = (Terminal->TargetCursorPos.X - Terminal->CursorPos.X) * PixelsPerTile - Terminal->CursorRelPos.X;
+
+        if(!Terminal->NoThrottle && (int)DeltaPixels == 0 && UntilGlobalBlink > 0)
         {
             HANDLE Handles[8];
             DWORD HandleCount = 0;
@@ -1285,7 +1311,7 @@ static DWORD WINAPI TerminalThread(LPVOID Param)
             Handles[HandleCount++] = Terminal->FastPipeReady;
             if(Terminal->Legacy_ReadStdOut != INVALID_HANDLE_VALUE) Handles[HandleCount++] = Terminal->Legacy_ReadStdOut;
             if(Terminal->Legacy_ReadStdError != INVALID_HANDLE_VALUE) Handles[HandleCount++] = Terminal->Legacy_ReadStdError;
-            MsgWaitForMultipleObjects(HandleCount, Handles, FALSE, BlinkMS, QS_ALLINPUT);
+            MsgWaitForMultipleObjects(HandleCount, Handles, FALSE, UntilGlobalBlink, QS_ALLINPUT);
         }
 
         ProcessMessages(Terminal);
@@ -1344,12 +1370,6 @@ static DWORD WINAPI TerminalThread(LPVOID Param)
         // TODO(casey): Split RendererDraw into two!
         // Update, and render, since we only need to update if we actually get new input.
 
-        LARGE_INTEGER BlinkTimer;
-        QueryPerformanceCounter(&BlinkTimer);
-        int Blink = ((1000*(BlinkTimer.QuadPart - StartTime.QuadPart) / (BlinkMS*Frequency.QuadPart)) & 1);
-        int WindowHasFocus = GetForegroundWindow() == Terminal->Window;
-        int CursorBlink = (((1000*(BlinkTimer.QuadPart - Terminal->CursorBlinkStartTime.QuadPart) / (BlinkMS*Frequency.QuadPart)) & 1) == 0) && WindowHasFocus;
-
         if (FrameIndex == 0)
         {
 			Terminal->CursorPos.Y = Terminal->TargetCursorPos.Y;
@@ -1359,9 +1379,7 @@ static DWORD WINAPI TerminalThread(LPVOID Param)
         }
         else
         {
-			float DeltaSec = (BlinkTimer.QuadPart - Terminal->TypingStartTime.QuadPart) / (float)Frequency.QuadPart;
-			int PixelsPerTile = 10;
-			float DeltaPixels = (Terminal->TargetCursorPos.X - Terminal->CursorPos.X) * PixelsPerTile - Terminal->CursorRelPos.X;
+			float DeltaSec = (EndTime.QuadPart - Terminal->TypingStartTime.QuadPart) / (float)Frequency.QuadPart;
             float MovingPixels = DeltaPixels * DeltaSec;
 
             float EndPixel = Terminal->CursorPos.X * PixelsPerTile + Terminal->CursorRelPos.X + MovingPixels;
@@ -1378,7 +1396,7 @@ static DWORD WINAPI TerminalThread(LPVOID Param)
         }
         if(Terminal->Renderer.Device)
         {
-            RendererDraw(Terminal, Width, Height, &Terminal->ScreenBuffer, Blink ? 0xffffffff : 0xff222222, CursorBlink ? 0xffffffff : 0xff222222);
+            RendererDraw(Terminal, Width, Height, &Terminal->ScreenBuffer, Terminal->GlobalBlinkState ? 0xffffffff : 0xff222222, Terminal->CursorBlinkState ? 0xffffffff : 0xff222222);
         }
         ++FrameIndex;
         ++FrameCount;

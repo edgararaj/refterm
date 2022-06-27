@@ -128,6 +128,9 @@ typedef struct
     LARGE_INTEGER CursorBlinkStartTime;
     LARGE_INTEGER TypingStartTime;
 
+    int GlobalBlinkState;
+    int CursorBlinkState;
+
 #define MinDirectCodepoint 32
 #define MaxDirectCodepoint 126
     gpu_glyph_index ReservedTileTable[MaxDirectCodepoint - MinDirectCodepoint + 1];
